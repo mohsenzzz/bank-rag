@@ -20,10 +20,11 @@ def clean_text(text):
 def load_documents(pdf_paths):
     docs=[]
     for pdf_path in pdf_paths:
+        print(f"pdf path: {pdf_path}")
         loader = PyPDFLoader(pdf_path)
         for doc in loader.load():
             doc.page_content = clean_text(doc.page_content)
             if doc.page_content:
                 doc.metadata["source_file"] = pdf_path.name
                 docs.append(doc)
-        return docs
+    return docs
