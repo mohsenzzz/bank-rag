@@ -1,0 +1,6 @@
+.venv
+
+#folders
+pdfs
+cache
+__pycache__
