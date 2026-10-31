@@ -1,7 +1,9 @@
 
 import json
+from operator import itemgetter
 import os
-import dotenv
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
 
 from file_manager import download_pdfs
 from settings import BASE_DIR
@@ -10,6 +12,11 @@ from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableParallel
+from langchain_core.output_parsers import StrOutputParser
+
+load_dotenv()
 
 PDF_DIR = os.getenv("PDF_DIR","pdfs")
 CACHE_DIR = os.getenv("CACHE_DIR","cache")
@@ -60,3 +67,45 @@ else:
     vector_store.save_local(str(VECTOR_DIR))
 
 retriever = vector_store.as_retriever(kwargs={"k":3})
+
+
+prompt = ChatPromptTemplate.from_template( """تو دستیار پرسش‌وپاسخ درباره اسناد ارائه‌شده هستی.
+فقط بر اساس متن داخل بخش «متن‌های بازیابی‌شده» پاسخ بده.
+اگر پاسخ در متن‌ها وجود ندارد، شفاف بگو: «در اسناد بازیابی‌شده پاسخ کافی پیدا نکردم.»
+پاسخ را به زبان فارسی، دقیق و خلاصه بده و در صورت امکان شماره صفحه/منبع را ذکر کن.
+
+متن‌های بازیابی‌شده:
+{context}
+
+سؤال کاربر: {question}
+
+پاسخ:""")
+
+llm =  ChatOpenAI(
+    model="nvidia/nemotron-3-ultra-550b-a55b:free",
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("API_KEY"),
+)
+
+RAG = RunnableParallel({
+    "context":itemgetter("question")|retriever,
+    "question":itemgetter("question"),
+}
+    
+)
+
+chain = RAG | prompt | llm |  StrOutputParser()
+
+def ask(question):
+    result = chain.invoke({"question": question})
+    print(result)
+questions = [
+    "موضوع اصلی این سند چیست؟",
+    "چه اشخاص یا نهادهایی مشمول این آیین‌نامه هستند؟",
+    "مهلت یا شرایط مهمی که در سند ذکر شده چیست؟",
+]
+for question in questions:
+    print("\n" + "=" * 80)
+    print("سؤال:", question)
+    print("پاسخ:")
+    print(chain.invoke({"question": question}))
